@@ -1,5 +1,7 @@
 # odsim
 
+**Live demo:** https://odsim.onrender.com
+
 A fast agent-based simulation of overdose risk and treatment access, with the statistics to evaluate public-health interventions built in: Kaplan-Meier and log-rank tests, Cox proportional hazards regression, Bayesian calibration with ABC-SMC, and an interactive web dashboard.
 
 ![Dashboard](docs/dashboard.png)
