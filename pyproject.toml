@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "odsim"
+version = "0.2.0"
+description = "Fast agent-based simulation of overdose risk and treatment access, with survival analysis, Cox regression, ABC calibration and a web dashboard."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Ansh Gosain"}]
+dependencies = ["numpy>=1.24", "pandas>=2.0", "scipy>=1.10"]
+
+[project.optional-dependencies]
+fast = ["numba>=0.59"]
+plots = ["matplotlib>=3.7"]
+web = ["fastapi>=0.110", "uvicorn>=0.27"]
+dev = ["pytest>=7", "httpx>=0.27", "numba>=0.59", "matplotlib>=3.7", "fastapi>=0.110", "uvicorn>=0.27"]
+# Optional: lets tests/test_survival.py cross-check results against lifelines.
+validate = ["lifelines>=0.27"]
+
+[project.scripts]
+odsim = "odsim.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"odsim.web" = ["default_config.json", "static/*", "static/vendor/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

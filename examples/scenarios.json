@@ -1,0 +1,12 @@
+{
+  "baseline": {},
+  "housing_first": {"frac_housed": 0.75},
+  "expanded_naloxone": {"naloxone_radius": 10.0},
+  "mobile_outreach": {
+    "extra_sites": [
+      {"x": 5,  "y": 55, "kind": "ssp"},
+      {"x": 55, "y": 5,  "kind": "ssp"}
+    ]
+  },
+  "low_barrier_treatment": {"p_enroll": 0.008, "unhoused_enroll_mult": 0.9}
+}

@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>odsim: overdose intervention simulator</title>
+<meta name="description" content="Change a public-health policy and see how many overdose deaths an agent-based simulation predicts it prevents.">
+<script src="/static/vendor/chart.umd.js"></script>
+<style>
+  @font-face {
+    font-family: "Public Sans";
+    src: url("/static/vendor/public-sans-latin-wght-normal.woff2") format("woff2");
+    font-weight: 100 900; font-display: swap;
+  }
+  :root {
+    color-scheme: light;
+    --surface: #ffffff;
+    --panel: #eef1f4;
+    --ink: #17212e;
+    --ink-2: #4f5b69;
+    --rule: #d5dbe2;
+    --baseline: #8a8f96;
+    --intervention: #2a78d6;
+    --treatment: #1baf7a;
+    --died: #eb6834;
+    --focus: #2a78d6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --surface: #14181d; --panel: #1d232a; --ink: #eef1f4; --ink-2: #a9b3be;
+      --rule: #333c46; --baseline: #8e959c; --intervention: #3987e5;
+      --treatment: #199e70; --died: #d95926; --focus: #6aa8f0;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface: #14181d; --panel: #1d232a; --ink: #eef1f4; --ink-2: #a9b3be;
+    --rule: #333c46; --baseline: #8e959c; --intervention: #3987e5;
+    --treatment: #199e70; --died: #d95926; --focus: #6aa8f0;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--surface); color: var(--ink);
+    font: 400 16px/1.5 "Public Sans", system-ui, sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
+  a { color: var(--intervention); }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  .layout {
+    display: grid; grid-template-columns: 340px minmax(0, 1fr);
+    min-height: 100vh;
+  }
+  aside {
+    background: var(--panel); padding: 28px 24px 40px;
+    border-right: 1px solid var(--rule);
+  }
+  main { padding: 32px 40px 56px; max-width: 1100px; }
+
+  .brand { font-weight: 800; font-size: 20px; letter-spacing: -0.01em; margin: 0; }
+  .brand-sub { color: var(--ink-2); font-size: 14px; margin: 4px 0 24px; }
+
+  fieldset { border: 0; padding: 0; margin: 0 0 24px; }
+  legend { font-weight: 600; font-size: 15px; margin-bottom: 10px; padding: 0; }
+
+  .presets { display: flex; flex-wrap: wrap; gap: 8px; }
+  .presets button {
+    font: inherit; font-size: 14px; padding: 6px 12px; border-radius: 999px;
+    border: 1px solid var(--rule); background: var(--surface); color: var(--ink); cursor: pointer;
+  }
+  .presets button[aria-pressed="true"] {
+    background: var(--intervention); border-color: var(--intervention); color: #fff;
+  }
+
+  .control { margin-bottom: 18px; }
+  .control-head { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+  .control-head label { font-weight: 500; }
+  .control-head output { color: var(--ink-2); }
+  .control-head output.changed { color: var(--intervention); font-weight: 600; }
+  .control p { margin: 2px 0 6px; color: var(--ink-2); font-size: 13px; line-height: 1.4; }
+  input[type="range"] { width: 100%; accent-color: var(--intervention); }
+
+  .run-row { display: flex; align-items: center; gap: 12px; }
+  .run {
+    font: inherit; font-weight: 600; padding: 10px 18px; border-radius: 8px; border: 0;
+    background: var(--ink); color: var(--surface); cursor: pointer;
+  }
+  .run:disabled { opacity: 0.6; cursor: progress; }
+  .status { font-size: 13px; color: var(--ink-2); }
+
+  /* The result sentence is the hero: the number is the design. */
+  .verdict { margin: 0 0 8px; font-size: clamp(28px, 4vw, 46px); line-height: 1.12; font-weight: 800; letter-spacing: -0.02em; max-width: 22ch; }
+  .verdict .num { color: var(--intervention); }
+  .verdict.worse .num { color: var(--died); }
+  .verdict.neutral .num { color: var(--ink); }
+  .verdict-sub { color: var(--ink-2); margin: 0 0 32px; max-width: 64ch; }
+
+  .figures { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 32px; }
+  figure { margin: 0; min-width: 0; }
+  figcaption { font-weight: 600; margin-bottom: 4px; }
+  .fig-note { color: var(--ink-2); font-size: 13px; margin: 0 0 10px; }
+  canvas#map { width: 100%; aspect-ratio: 1; display: block; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); }
+  .chart-wrap { position: relative; height: 340px; }
+  .key { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; font-size: 13px; color: var(--ink-2); padding: 0; list-style: none; }
+  .key li { display: flex; align-items: center; gap: 6px; }
+  .swatch { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .swatch.square { border-radius: 2px; background: none; border: 2px solid var(--ink); }
+  .swatch.ring { background: none; border: 2px solid var(--treatment); }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 36px; font-size: 15px; }
+  caption { text-align: left; font-weight: 600; margin-bottom: 8px; }
+  th, td { padding: 10px 12px; border-bottom: 1px solid var(--rule); text-align: right; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { color: var(--ink-2); font-weight: 500; font-size: 14px; }
+  .table-wrap { overflow-x: auto; }
+
+  .about { margin-top: 40px; color: var(--ink-2); font-size: 14px; max-width: 70ch; }
+  .error { color: var(--died); font-weight: 600; }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    aside { border-right: 0; border-bottom: 1px solid var(--rule); padding: 20px 16px 28px; }
+    main { padding: 24px 16px 40px; }
+    .figures { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside>
+    <p class="brand">odsim</p>
+    <p class="brand-sub">Overdose intervention simulator</p>
+
+    <fieldset>
+      <legend>Start from a policy</legend>
+      <div class="presets" id="presets"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Or adjust the intervention</legend>
+      <div id="controls"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Simulation size</legend>
+      <div class="control">
+        <div class="control-head"><label for="n_agents">People</label><output for="n_agents" id="n_agents_out"></output></div>
+        <input type="range" id="n_agents" min="500" max="5000" step="500" value="2000">
+      </div>
+      <div class="control">
+        <div class="control-head"><label for="reps">Repeated runs</label><output for="reps" id="reps_out"></output></div>
+        <p>More runs give steadier estimates but take longer.</p>
+        <input type="range" id="reps" min="1" max="8" step="1" value="4">
+      </div>
+    </fieldset>
+
+    <div class="run-row">
+      <button class="run" id="run" type="button">Run simulation</button>
+      <span class="status" id="status" role="status" aria-live="polite"></span>
+    </div>
+  </aside>
+
+  <main>
+    <h1 class="verdict" id="verdict">Pick a policy to see its effect.</h1>
+    <p class="verdict-sub" id="verdict-sub">Each run follows a simulated population for one year in a neighborhood with treatment sites and a syringe service program, then compares your policy with the current one.</p>
+
+    <div class="figures">
+      <figure>
+        <figcaption>The neighborhood after one year</figcaption>
+        <p class="fig-note">One run of your policy. Each dot is a person.</p>
+        <canvas id="map" width="600" height="600" role="img" aria-label="Map of simulated people and service sites"></canvas>
+        <ul class="key">
+          <li><span class="swatch" style="background:var(--baseline)"></span>Not in treatment</li>
+          <li><span class="swatch" style="background:var(--intervention)"></span>In treatment</li>
+          <li><span class="swatch" style="background:var(--died)"></span>Died</li>
+          <li><span class="swatch square"></span>Treatment site</li>
+          <li><span class="swatch ring"></span>Naloxone reach</li>
+        </ul>
+      </figure>
+      <figure>
+        <figcaption>Share of people still alive</figcaption>
+        <p class="fig-note">Kaplan-Meier survival, pooled over all runs.</p>
+        <div class="chart-wrap"><canvas id="survival" aria-label="Survival curves for current policy and your policy"></canvas></div>
+      </figure>
+    </div>
+
+    <div class="table-wrap">
+      <table id="results" hidden>
+        <caption>Results per run</caption>
+        <thead><tr><th scope="col">Measure</th><th scope="col">Current policy</th><th scope="col">Your policy</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <p class="about">The model is an agent-based simulation: every person moves, may enroll in or leave treatment, and may overdose each day. Overdoses are less often fatal near naloxone or with someone else nearby, and unhoused people face higher risk and lower access to treatment. Parameters are illustrative, not calibrated to real data. Built with Python, NumPy and FastAPI; source on <a href="https://github.com/YOUR-HANDLE/odsim">GitHub</a>.</p>
+  </main>
+</div>
+
+<script>
+const PRESETS = {
+  "Housing first": { frac_housed: 0.75 },
+  "More naloxone": { naloxone_radius: 12 },
+  "Low-barrier treatment": { p_enroll: 0.008, unhoused_enroll_mult: 0.9 },
+  "Combined": { frac_housed: 0.75, naloxone_radius: 12, p_enroll: 0.008, unhoused_enroll_mult: 0.9 },
+};
+let params = [], base = {}, values = {}, grid = { width: 60, height: 60 }, chart = null, lastMap = null, pending = null;
+const $ = (id) => document.getElementById(id);
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+function fmt(v, step) {
+  const decimals = Math.max(0, -Math.floor(Math.log10(step)));
+  return Number(v).toFixed(decimals);
+}
+
+function renderControls() {
+  const box = $("controls");
+  box.innerHTML = "";
+  for (const p of params) {
+    const div = document.createElement("div");
+    div.className = "control";
+    div.innerHTML = `
+      <div class="control-head"><label for="${p.name}">${p.label}</label><output id="${p.name}_out" for="${p.name}"></output></div>
+      <p>${p.help}</p>
+      <input type="range" id="${p.name}" min="${p.min}" max="${p.max}" step="${p.step}" value="${values[p.name]}">`;
+    box.appendChild(div);
+    const input = div.querySelector("input");
+    input.addEventListener("input", () => { values[p.name] = Number(input.value); syncPresets(); updateOutputs(); schedule(); });
+  }
+  updateOutputs();
+}
+
+function updateOutputs() {
+  for (const p of params) {
+    const out = $(p.name + "_out");
+    out.textContent = fmt(values[p.name], p.step);
+    out.classList.toggle("changed", Math.abs(values[p.name] - base[p.name]) > 1e-9);
+    $(p.name).value = values[p.name];
+  }
+  $("n_agents_out").textContent = Number($("n_agents").value).toLocaleString();
+  $("reps_out").textContent = $("reps").value;
+}
+
+function renderPresets() {
+  const box = $("presets");
+  for (const name of Object.keys(PRESETS)) {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = name; b.setAttribute("aria-pressed", "false");
+    b.addEventListener("click", () => {
+      values = { ...base, ...PRESETS[name] };
+      syncPresets(); updateOutputs(); run();
+    });
+    box.appendChild(b);
+  }
+  const reset = document.createElement("button");
+  reset.type = "button"; reset.textContent = "Current policy"; reset.setAttribute("aria-pressed", "false");
+  reset.addEventListener("click", () => { values = { ...base }; syncPresets(); updateOutputs(); run(); });
+  box.appendChild(reset);
+}
+
+function syncPresets() {
+  for (const b of $("presets").children) {
+    const target = PRESETS[b.textContent] || {};
+    const want = { ...base, ...target };
+    b.setAttribute("aria-pressed", String(params.every((p) => Math.abs(values[p.name] - want[p.name]) < 1e-9)));
+  }
+}
+
+function intervention() {
+  const out = {};
+  for (const p of params) if (Math.abs(values[p.name] - base[p.name]) > 1e-9) out[p.name] = values[p.name];
+  return out;
+}
+
+function schedule() { clearTimeout(pending); pending = setTimeout(run, 450); }
+
+async function run() {
+  clearTimeout(pending);
+  const btn = $("run");
+  btn.disabled = true;
+  $("status").textContent = "Running…";
+  $("status").classList.remove("error");
+  try {
+    const res = await fetch("/api/simulate", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ intervention: intervention(), n_agents: Number($("n_agents").value), reps: Number($("reps").value) }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : "The simulation request was rejected.");
+    show(data);
+    $("status").textContent = "";
+  } catch (err) {
+    $("status").textContent = err.message || "Could not reach the server. Check that it is running.";
+    $("status").classList.add("error");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function show(data) {
+  const b = data.summary.baseline, i = data.summary.intervention;
+  const n = Number($("n_agents").value);
+  const prevented = Math.round((b.mortality_mean - i.mortality_mean) * n);
+  const changed = Object.keys(intervention()).length > 0;
+  const v = $("verdict"), sub = $("verdict-sub");
+  v.classList.toggle("worse", changed && prevented < 0);
+  v.classList.toggle("neutral", !changed);
+  if (!changed) {
+    v.innerHTML = `<span class="num">${Math.round(b.mortality_mean * n)}</span> of ${n.toLocaleString()} people die in a year under the current policy.`;
+    sub.textContent = "Change a setting or pick a policy to compare.";
+  } else {
+    const word = prevented >= 0 ? "fewer" : "more";
+    v.innerHTML = `<span class="num">${Math.abs(prevented)}</span> ${word} deaths per ${n.toLocaleString()} people in a year.`;
+    const p = i.logrank_p;
+    const sig = p < 0.05 ? "a difference unlikely to be chance" : "not distinguishable from chance at this size; try more runs";
+    sub.textContent = `Hazard ratio ${i.hazard_ratio.toFixed(2)} (95% CI ${i.hr_ci_low.toFixed(2)} to ${i.hr_ci_high.toFixed(2)}), log-rank p = ${p < 0.001 ? "< 0.001" : p.toFixed(3)}: ${sig}.`;
+  }
+  drawSurvival(data.curves);
+  lastMap = data.map;
+  drawMap(lastMap);
+  fillTable(b, i);
+}
+
+function drawSurvival(curves) {
+  const toPts = (c) => c.time.map((t, k) => ({ x: t, y: c.survival[k] }));
+  const datasets = [
+    { label: "Current policy", data: toPts(curves.baseline), borderColor: css("--baseline") },
+    { label: "Your policy", data: toPts(curves.intervention), borderColor: css("--intervention") },
+  ].map((d) => ({ ...d, stepped: "before", borderWidth: 2, pointRadius: 0, pointHitRadius: 8 }));
+  const ink2 = css("--ink-2"), rule = css("--rule");
+  if (chart) { chart.data.datasets = datasets; chart.update(); return; }
+  chart = new Chart($("survival"), {
+    type: "line",
+    data: { datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: { mode: "nearest", axis: "x", intersect: false },
+      scales: {
+        x: { type: "linear", min: 0, max: 365, title: { display: true, text: "Day", color: ink2 }, ticks: { color: ink2 }, grid: { color: rule } },
+        y: { title: { display: true, text: "Share alive", color: ink2 }, ticks: { color: ink2, callback: (v) => Math.round(v * 100) + "%" }, grid: { color: rule } },
+      },
+      plugins: {
+        legend: { labels: { color: ink2, usePointStyle: true, pointStyle: "line" } },
+        tooltip: { callbacks: { title: (items) => "Day " + Math.round(items[0].parsed.x), label: (c) => `${c.dataset.label}: ${(c.parsed.y * 100).toFixed(1)}%` } },
+      },
+    },
+  });
+}
+
+function drawMap(m) {
+  if (!m) return;
+  const cv = $("map"), dpr = window.devicePixelRatio || 1;
+  const size = cv.clientWidth;
+  cv.width = size * dpr; cv.height = size * dpr;
+  const ctx = cv.getContext("2d");
+  ctx.scale(dpr, dpr);
+  const cell = size / grid.width;
+  ctx.fillStyle = css("--surface"); ctx.fillRect(0, 0, size, size);
+
+  ctx.setLineDash([4, 4]); ctx.lineWidth = 1.5; ctx.strokeStyle = css("--treatment");
+  ctx.fillStyle = css("--treatment") + "1a";
+  for (const s of m.sites.filter((s) => s.kind === "ssp")) {
+    ctx.beginPath(); ctx.arc((s.x + 0.5) * cell, (s.y + 0.5) * cell, Math.max(m.naloxone_radius, 0.5) * cell, 0, Math.PI * 2);
+    ctx.fill(); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  const colors = [css("--baseline"), css("--intervention"), css("--died")];
+  for (const status of [0, 1, 2]) {   // draw deaths last so they stay visible
+    ctx.fillStyle = colors[status];
+    for (const [x, y, st] of m.agents) {
+      if (st !== status) continue;
+      const jx = ((x * 7 + y * 13) % 10) / 10 - 0.45, jy = ((x * 11 + y * 3) % 10) / 10 - 0.45;
+      ctx.beginPath(); ctx.arc((x + 0.5 + jx * 0.6) * cell, (y + 0.5 + jy * 0.6) * cell, status === 2 ? 2.6 : 1.8, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  ctx.lineWidth = 2; ctx.strokeStyle = css("--ink");
+  for (const s of m.sites.filter((s) => s.kind === "treatment")) {
+    ctx.strokeRect(s.x * cell - 2, s.y * cell - 2, cell + 4, cell + 4);
+  }
+}
+
+function fillTable(b, i) {
+  const pct = (v) => (v * 100).toFixed(1) + "%";
+  const rows = [
+    ["Deaths", pct(b.mortality_mean), pct(i.mortality_mean)],
+    ["Ever enrolled in treatment", pct(b.enrollment_mean), pct(i.enrollment_mean)],
+    ["Overdoses", Math.round(b.overdoses_per_run).toLocaleString(), Math.round(i.overdoses_per_run).toLocaleString()],
+    ["Alive after one year", pct(b.survival_end), pct(i.survival_end)],
+  ];
+  const tbody = $("results").querySelector("tbody");
+  tbody.innerHTML = rows.map((r) => `<tr><th scope="row">${r[0]}</th><td>${r[1]}</td><td>${r[2]}</td></tr>`).join("");
+  $("results").hidden = false;
+}
+
+async function init() {
+  try {
+    const res = await fetch("/api/parameters");
+    const data = await res.json();
+    params = data.parameters; grid = data.grid;
+    base = Object.fromEntries(params.map((p) => [p.name, p.base]));
+    values = { ...base };
+    renderPresets(); renderControls(); syncPresets();
+    $("n_agents").addEventListener("input", () => { updateOutputs(); schedule(); });
+    $("reps").addEventListener("input", () => { updateOutputs(); schedule(); });
+    $("run").addEventListener("click", run);
+    window.addEventListener("resize", () => drawMap(lastMap));
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { chart?.destroy(); chart = null; run(); });
+    run();
+  } catch {
+    $("status").textContent = "Could not load the model settings. Check that the server is running.";
+    $("status").classList.add("error");
+  }
+}
+init();
+</script>
+</body>
+</html>

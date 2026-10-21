@@ -1,0 +1,12 @@
+# One-click deploy on Render (render.com): New > Blueprint > pick this repo.
+services:
+  - type: web
+    name: odsim
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: ODSIM_MAX_AGENTS
+        value: "5000"
+      - key: ODSIM_MAX_REPS
+        value: "8"

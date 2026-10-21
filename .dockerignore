@@ -1,0 +1,10 @@
+.git
+.github
+tests
+benchmarks
+**/__pycache__
+*.egg-info
+.pytest_cache
+*.csv
+*.html
+!src/odsim/web/static/*.html

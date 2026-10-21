@@ -1,0 +1,18 @@
+{
+  "_comment": "Synthetic targets generated from p_overdose=0.0025, p_enroll=0.006 so calibration can be checked against a known answer.",
+  "priors": {
+    "p_overdose": [
+      0.0005,
+      0.006
+    ],
+    "p_enroll": [
+      0.001,
+      0.02
+    ]
+  },
+  "targets": {
+    "mortality": 0.0594,
+    "enrollment": 0.501,
+    "overdoses_per_agent": 1.0318
+  }
+}
